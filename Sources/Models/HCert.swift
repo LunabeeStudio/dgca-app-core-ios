@@ -42,17 +42,14 @@ enum AttributeKey: String {
   case testStatements
   case vaccineStatements
   case recoveryStatements
-}
-
-public enum AppType: Int {
-  case verifier
-  case wallet
+  case exemptionStatement // Needed for France additions.
 }
 
 public enum HCertType: String {
   case test
   case vaccine
   case recovery
+  case exemption // Needed for France additions.
   case unknown
 }
 
@@ -70,7 +67,8 @@ let attributeKeys: [AttributeKey: [String]] = [
   .dateOfBirth: ["dob"],
   .testStatements: ["t"],
   .vaccineStatements: ["v"],
-  .recoveryStatements: ["r"]
+  .recoveryStatements: ["r"],
+  .exemptionStatement: ["ex"] // Needed for France additions.
 ]
 
 public enum InfoSectionStyle {
@@ -82,26 +80,6 @@ public enum RuleValidationResult: Int {
   case error = 0
   case passed
   case open
-}
-
-public struct InfoSection {
-  public var header: String
-  public var content: String
-  public var style = InfoSectionStyle.normal
-  public var isPrivate = false
-  public var sectionItems: [InfoSection] = []
-  public var isExpanded: Bool = false
-  public var countryName: String?
-  public var ruleValidationResult: RuleValidationResult = .open
-  
-  public init(header: String, content: String, style: InfoSectionStyle = .normal, isPrivate: Bool = false,  countryName: String? = nil, ruleValidationResult: RuleValidationResult = .open) {
-    self.header = header
-    self.content = content
-    self.countryName = countryName
-    self.style = style
-    self.isPrivate = isPrivate
-    self.ruleValidationResult = ruleValidationResult
-  }
 }
 
 public struct HCertConfig {
@@ -125,11 +103,11 @@ public struct HCert {
   public static var debugPrintJsonErrors = true
   public static var config = HCertConfig()
   public static var publicKeyStorageDelegate: PublicKeyStorageDelegate?
-  public static let supportedPrefixes = [
-    "HC1:"
+  public static var supportedPrefixes = [
+      "HC1:",
+      WalletConstant.DccPrefix.exemptionCertificate.rawValue,
+      WalletConstant.DccPrefix.activityCertificate.rawValue
   ]
-  
-  public var appType: AppType = .verifier
   
   static func parsePrefix(_ payloadString: String) -> String {
     var payloadString = payloadString
@@ -141,7 +119,7 @@ public struct HCert {
     return payloadString
   }
   
-  static private func checkCH1PreffixExist(_ payloadString: String?) -> Bool {
+  static private func checkHC1PrefixExist(_ payloadString: String?) -> Bool {
     guard let payloadString = payloadString  else { return false }
     var foundPrefix = false
     Self.supportedPrefixes.forEach { prefix in
@@ -150,10 +128,9 @@ public struct HCert {
     return foundPrefix
   }
   
-  public init?(from payload: String, errors: ParseErrors? = nil, applicationType: AppType = .verifier) {
-    
+  public init?(from payload: String, errors: ParseErrors? = nil) {
     let payload = payload
-    if Self.checkCH1PreffixExist(payload) {
+    if Self.checkHC1PrefixExist(payload) {
       fullPayloadString = payload
       payloadString = Self.parsePrefix(payload)
     } else {
@@ -161,8 +138,7 @@ public struct HCert {
       fullPayloadString = fullPayloadString + payload
       payloadString = payload
     }
-    appType = applicationType
-    
+    let prefix: String = fullPayloadString.replacingOccurrences(of: payloadString, with: "")
     guard
       let compressed = try? payloadString.fromBase45()
     else {
@@ -183,8 +159,8 @@ public struct HCert {
       return nil
     }
     kidStr = KID.string(from: kid)
-    header = JSON(parseJSON: headerStr)
-    var body = JSON(parseJSON: bodyStr)
+    header = SwiftyJSON.JSON(parseJSON: headerStr)
+    var body = SwiftyJSON.JSON(parseJSON: bodyStr)
     iat = Date(timeIntervalSince1970: Double(body["6"].int ?? 0))
     exp = Date(timeIntervalSince1970: Double(body["4"].int ?? 0))
     issCode = body["1"].string ?? ""
@@ -193,7 +169,7 @@ public struct HCert {
     }
     if body[ClaimKey.euDgcV1.rawValue].exists() {
       self.body = body[ClaimKey.euDgcV1.rawValue]
-      if !parseBodyV1(errors: errors) {
+      if !parseBodyV1(errors: errors, schema: schema(for: prefix)) {
         return nil
       }
     } else {
@@ -202,7 +178,6 @@ public struct HCert {
       return nil
     }
     findValidity()
-    makeSections(for: appType)
     
     #if os(iOS)
     if Self.config.prefetchAllCodes {
@@ -210,7 +185,16 @@ public struct HCert {
     }
     #endif
   }
-  
+
+  func schema(for prefix: String) -> String {
+      switch prefix {
+      case WalletConstant.DccPrefix.exemptionCertificate.rawValue:
+          return exemptionDccSchema
+      default:
+          return euDgcSchemaV1
+      }
+  }
+
   mutating func findValidity() {
     validityFailures = []
     if !cryptographicallyValid {
@@ -227,353 +211,9 @@ public struct HCert {
     }
     validityFailures.append(contentsOf: statement.validityFailures)
   }
-  
-  //
-  public mutating func makeSectionForRuleError(infoSections: InfoSection, for appType: AppType) {
-    info.removeAll()
-    info = []
-    info += [
-      InfoSection(
-        header: l10n("header.cert-type"),
-        content: certTypeString
-      )
-    ] + personIdentifiers
-    if !isValid {
-      info += [
-        InfoSection(header: l10n("header.validity-errors"), content: validityFailures.joined(separator: " "))
-      ]
-    }
-    if !isValid { return }
-    info += [infoSections]
-    switch appType {
-    case .verifier:
-        makeSectionsForVerifier(includeInvalidSection: false)
-    case .wallet:
-      switch type {
-        case .vaccine:
-          makeSectionsForVaccine(includeInvalidSection: false)
-          break
-      case .test:
-        makeSectionsForTest()
-        break
-      case .recovery:
-        makeSectionsForRecovery(includeInvalidSection: false)
-        break
-        default:
-          makeSectionsForVerifier(includeInvalidSection: false)
-        }
-      break
-    }
-  }
-
-  //
-  
-  mutating func makeSections(for appType: AppType) {
-    info.removeAll()
-    switch appType {
-    case .verifier:
-        makeSectionsForVerifier()
-    case .wallet:
-      switch type {
-        case .vaccine:
-          makeSectionsForVaccine()
-          break
-      case .test:
-        makeSectionsForTest()
-        break
-      case .recovery:
-        makeSectionsForRecovery()
-        break
-        default:
-          makeSectionsForVerifier()
-        }
-      break
-    }
-  }
-  
-  mutating func makeSectionsForVerifier(includeInvalidSection: Bool = true) {
-    if includeInvalidSection {
-      info = []
-      info += [
-        InfoSection(
-          header: l10n("header.cert-type"),
-          content: certTypeString
-        )
-      ] + personIdentifiers
-      if !isValid {
-        info += [
-          InfoSection(header: l10n("header.validity-errors"), content: validityFailures.joined(separator: " "))
-        ]
-      }
-      if !isValid { return }
-    }
-    if let last = get(.lastNameStandardized).string {
-      info += [
-        InfoSection(
-          header: l10n("header.std-fn"),
-          content: last.replacingOccurrences(
-            of: "<",
-            with: String.zeroWidthSpace + "<" + String.zeroWidthSpace),
-          style: .fixedWidthFont
-        )
-      ]
-    }
-    if let first = get(.firstNameStandardized).string {
-      info += [
-        InfoSection(
-          header: l10n("header.std-gn"),
-          content: first.replacingOccurrences(
-            of: "<",
-            with: String.zeroWidthSpace + "<" + String.zeroWidthSpace),
-          style: .fixedWidthFont
-        )
-      ]
-    }
-    if let date = get(.dateOfBirth).string {
-      info += [
-        InfoSection(
-          header: l10n("header.dob"),
-          content: date
-        )
-      ]
-    }
-    info += statement == nil ? [] : statement.info
-    info += [
-      InfoSection(
-        header: l10n("header.uvci"),
-        content: uvci,
-        style: .fixedWidthFont,
-        isPrivate: true
-      )
-    ]
-    if issCode.count > 0 {
-      info += [
-        InfoSection(
-          header: l10n("issuer.country"),
-          content: l10n("country.\(issCode.uppercased())")
-        )
-      ]
-    }
-  }
-  
-  mutating func makeSectionsForVaccine(includeInvalidSection: Bool = true) {
-    if includeInvalidSection {
-      info = []
-      info += [
-        InfoSection(
-          header: l10n("header.cert-type"),
-          content: certTypeString
-        )
-      ] + personIdentifiers
-      if !isValid {
-        info += [
-          InfoSection(header: l10n("header.validity-errors"), content: validityFailures.joined(separator: " "))
-        ]
-      }
-    }
-    var fullName = ""
-    if let first = get(.firstName).string {
-         fullName = fullName + first.replacingOccurrences(
-          of: "<",
-          with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-    }
-    if let last = get(.lastName).string {
-      if !fullName.isEmpty {
-      fullName = fullName + " " + last.replacingOccurrences(
-       of: "<",
-       with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-      } else {
-        fullName = fullName + last.replacingOccurrences(
-         of: "<",
-         with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-      }
-    }
-
-    if fullName.isEmpty {
-      if let first = get(.firstNameStandardized).string {
-           fullName = fullName + first.replacingOccurrences(
-            of: "<",
-            with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-      }
-      if let last = get(.lastNameStandardized).string {
-        if !fullName.isEmpty {
-        fullName = fullName + " " + last.replacingOccurrences(
-         of: "<",
-         with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-        } else {
-          fullName = fullName + last.replacingOccurrences(
-           of: "<",
-           with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-        }
-      }
-    }
-    
-    if !fullName.isEmpty {
-      info += [
-        InfoSection(
-          header: l10n("section.name"),
-          content: fullName,
-          style: .fixedWidthFont
-        )
-      ]
-    }
-    info += statement == nil ? [] : statement.walletInfo
-    if issCode.count > 0 {
-      info += [
-        InfoSection(
-          header: l10n("issuer.country"),
-          content: l10n("country.\(issCode.uppercased())")
-        )
-      ]
-    }
-  }
-  
-  mutating func makeSectionsForTest(includeInvalidSection: Bool = true) {
-    if includeInvalidSection {
-      info = []
-      info += [
-        InfoSection(
-          header: l10n("header.cert-type"),
-          content: certTypeString
-        )
-      ] + personIdentifiers
-      if !isValid {
-        info += [
-          InfoSection(header: l10n("header.validity-errors"), content: validityFailures.joined(separator: " "))
-        ]
-      }
-    }
-    var fullName = ""
-    if let first = get(.firstName).string {
-         fullName = fullName + first.replacingOccurrences(
-          of: "<",
-          with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-    }
-    if let last = get(.lastName).string {
-      if !fullName.isEmpty {
-      fullName = fullName + " " + last.replacingOccurrences(
-       of: "<",
-       with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-      } else {
-        fullName = fullName + last.replacingOccurrences(
-         of: "<",
-         with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-      }
-    }
-
-    if fullName.isEmpty {
-      if let first = get(.firstNameStandardized).string {
-           fullName = fullName + first.replacingOccurrences(
-            of: "<",
-            with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-      }
-      if let last = get(.lastNameStandardized).string {
-        if !fullName.isEmpty {
-        fullName = fullName + " " + last.replacingOccurrences(
-         of: "<",
-         with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-        } else {
-          fullName = fullName + last.replacingOccurrences(
-           of: "<",
-           with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-        }
-      }
-    }
-
-    if !fullName.isEmpty {
-      info += [
-        InfoSection(
-          header: l10n("section.name"),
-          content: fullName,
-          style: .fixedWidthFont
-        )
-      ]
-    }
-    info += statement == nil ? [] : statement.walletInfo
-    if issCode.count > 0 {
-      info += [
-        InfoSection(
-          header: l10n("issuer.country"),
-          content: l10n("country.\(issCode.uppercased())")
-        )
-      ]
-    }
-  }
-
-  mutating func makeSectionsForRecovery(includeInvalidSection: Bool = true) {
-    if includeInvalidSection {
-      info = []
-      info += [
-        InfoSection(
-          header: l10n("header.cert-type"),
-          content: certTypeString
-        )
-      ] + personIdentifiers
-      if !isValid {
-        info += [
-          InfoSection(header: l10n("header.validity-errors"), content: validityFailures.joined(separator: " "))
-        ]
-      }
-    }
-    var fullName = ""
-    if let first = get(.firstName).string {
-         fullName = fullName + first.replacingOccurrences(
-          of: "<",
-          with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-    }
-    if let last = get(.lastName).string {
-      if !fullName.isEmpty {
-      fullName = fullName + " " + last.replacingOccurrences(
-       of: "<",
-       with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-      } else {
-        fullName = fullName + last.replacingOccurrences(
-         of: "<",
-         with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-      }
-    }
-
-    if fullName.isEmpty {
-      if let first = get(.firstNameStandardized).string {
-           fullName = fullName + first.replacingOccurrences(
-            of: "<",
-            with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-      }
-      if let last = get(.lastNameStandardized).string {
-        if !fullName.isEmpty {
-        fullName = fullName + " " + last.replacingOccurrences(
-         of: "<",
-         with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-        } else {
-          fullName = fullName + last.replacingOccurrences(
-           of: "<",
-           with: String.zeroWidthSpace + "<" + String.zeroWidthSpace)
-        }
-      }
-    }
-
-    if !fullName.isEmpty {
-      info += [
-        InfoSection(
-          header: l10n("section.name"),
-          content: fullName,
-          style: .fixedWidthFont
-        )
-      ]
-    }
-    info += statement == nil ? [] : statement.walletInfo
-    if issCode.count > 0 {
-      info += [
-        InfoSection(
-          header: l10n("issuer.country"),
-          content: l10n("country.\(issCode.uppercased())")
-        )
-      ]
-    }
-  }
 
   
-  func get(_ attribute: AttributeKey) -> JSON {
+  func get(_ attribute: AttributeKey) -> SwiftyJSON.JSON {
     var object = body
     for key in attributeKeys[attribute] ?? [] {
       object = object[key]
@@ -585,15 +225,13 @@ public struct HCert {
     type.l10n + (statement == nil ? "" : " \(statement.typeAddon)")
   }
   
-  public var info = [InfoSection]()
-  
   public var fullPayloadString: String
   public var payloadString: String
   public var cborData: Data
   public var kidStr: String
   public var issCode: String
-  public var header: JSON
-  public var body: JSON
+  public var header: SwiftyJSON.JSON
+  public var body: SwiftyJSON.JSON
   public var iat: Date
   public var exp: Date
   public var ruleCountryCode: String?
@@ -614,11 +252,6 @@ public struct HCert {
   public var dateOfBirth: String {
     let dob = get(.dateOfBirth).string ?? ""
     return "\(dob)"
-  }
-  
-  var personIdentifiers: [InfoSection] {
-    // Note from author: Identifiers were previously planned, but got removed *for now*.
-    []
   }
   
   var testStatements: [TestEntry] {
@@ -642,8 +275,9 @@ public struct HCert {
         RecoveryEntry(body: $0)
       } ?? []
   }
+  var exemptionStatement: ExemptionEntry? { ExemptionEntry(body: SwiftyJSON.JSON(get(.exemptionStatement))) }
   var statements: [HCertEntry] {
-    testStatements + vaccineStatements + recoveryStatements
+      testStatements + vaccineStatements + recoveryStatements + [exemptionStatement].compactMap { $0 }
   }
   public var statement: HCertEntry! {
     statements.last
@@ -655,9 +289,11 @@ public struct HCert {
     if statement is RecoveryEntry {
       return .recovery
     }
-    
     if statement is TestEntry {
       return .test
+    }
+    if statement is ExemptionEntry {
+        return .exemption
     }
     return .unknown
   }
@@ -679,7 +315,7 @@ public struct HCert {
         return false
       }
       if X509.checkisSuitable(cert:key,certType:type) {
-        if COSE.verify(_cbor: cborData, with: key) {
+          if COSE.verify(_cbor: cborData, with: key.cleaningPEMStrings()) {
           return true
         } else {
           return false

@@ -36,64 +36,6 @@ enum TestResult: String {
 struct TestEntry: HCertEntry {
   var typeAddon: String { "" }
 
-  var info: [InfoSection] {
-    [
-      InfoSection(header: l10n("test.sample-date-time"), content: sampleTime.dateTimeStringUtc),
-      InfoSection(
-        header: l10n("test.test-result"),
-        content: resultNegative ? l10n("test.result.negative") : l10n("test.result.positive")
-      ),
-      InfoSection(
-        header: l10n("test.disease"),
-        content: l10n("disease." + diseaseTargeted, or: "\(l10n("disease.unknown")): \(diseaseTargeted)")
-      ),
-      InfoSection(
-        header: l10n("test.center"),
-        content: testCenter,
-        isPrivate: true
-      ),
-      InfoSection(
-        header: l10n("test.country"),
-        content: country(for: countryCode),
-        isPrivate: true
-      ),
-      InfoSection(
-        header: l10n("test.issuer"),
-        content: issuer,
-        isPrivate: true
-      )
-    ]
-  }
-
-  var walletInfo: [InfoSection] {
-    [
-      InfoSection(
-        header: l10n("test.test-result"),
-        content: resultNegative ? l10n("test.result.negative") : l10n("test.result.positive")
-      ),
-      InfoSection(header: l10n("test.sample-date-time"), content: sampleTime.dateTimeStringUtc),
-      InfoSection(header: l10n("test.type"), content: type),
-      InfoSection(
-        header: l10n("test.disease"),
-        content: l10n("disease." + diseaseTargeted, or: "\(l10n("disease.unknown")): \(diseaseTargeted)")
-      ),
-      InfoSection(
-        header: l10n("test.center"),
-        content: testCenter,
-        isPrivate: true
-      ),
-      InfoSection(
-        header: l10n("test.country"),
-        content: country(for: countryCode),
-        isPrivate: true
-      ),
-      InfoSection(
-        header: l10n("test.issuer"),
-        content: issuer,
-        isPrivate: true
-      )
-    ]
-  }
 
   var validityFailures: [String] {
     var fail = [String]()
@@ -115,9 +57,10 @@ struct TestEntry: HCertEntry {
     case countryCode = "co"
     case issuer = "is"
     case uvci = "ci"
+    case manufacturer = "ma"
   }
 
-  init?(body: JSON) {
+  init?(body: SwiftyJSON.JSON) {
     guard
       let diseaseTargeted = body[Fields.diseaseTargeted.rawValue].string,
       let type = body[Fields.type.rawValue].string,
@@ -139,6 +82,7 @@ struct TestEntry: HCertEntry {
     self.countryCode = countryCode
     self.issuer = issuer
     self.uvci = uvci
+    self.manufacturer = body[Fields.manufacturer.rawValue].string
   }
 
   var diseaseTargeted: String
@@ -149,4 +93,5 @@ struct TestEntry: HCertEntry {
   var countryCode: String
   var issuer: String
   var uvci: String
+  var manufacturer: String?
 }

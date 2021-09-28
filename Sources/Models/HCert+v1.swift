@@ -29,9 +29,9 @@ import SwiftyJSON
 import JSONSchema
 
 extension HCert {
-  mutating func parseBodyV1(errors: ParseErrors? = nil) -> Bool {
+  mutating func parseBodyV1(errors: ParseErrors? = nil, schema: String) -> Bool {
     guard
-      let schema = JSON(parseJSON: euDgcSchemaV1).dictionaryObject,
+      let schema = SwiftyJSON.JSON(parseJSON: schema).dictionaryObject,
       let bodyDict = body.dictionaryObject
     else {
       errors?.errors.append(.json(error: "Validation failed"))

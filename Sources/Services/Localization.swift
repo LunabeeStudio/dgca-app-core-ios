@@ -29,26 +29,15 @@ import Foundation
 public var l10nModule: Bundle?
 
 public func l10n(_ string: String, with comment: String? = nil, or fallback: String? = nil) -> String {
-  var text = NSLocalizedString(string, comment: comment ?? "No comment provided.")
-  if text != string {
-    return text
-  }
-  text = NSLocalizedString(string, bundle: l10nModule ?? L10N.bundle, comment: comment ?? "No comment provided.")
-  if text != string {
-    return text
-  }
-  return fallback ?? string
+    let text: String = string.localized
+    return text != string ? text : fallback ?? string
 }
 
 public extension RawRepresentable where RawValue == String {
-  var l10n: String {
-    let key = "enum.\(String(describing: Self.self)).\(rawValue)"
-    let text = NSLocalizedString(key, comment: "Automatic enum case.")
-    if text != key {
-      return text
+    var l10n: String {
+        let key: String = "enum.\(String(describing: Self.self)).\(rawValue)"
+        return key.localized
     }
-    return NSLocalizedString(key, bundle: l10nModule ?? L10N.bundle, comment: "Automatic enum case.")
-  }
 }
 
 public func country(for code: String) -> String {

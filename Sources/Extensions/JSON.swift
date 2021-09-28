@@ -26,15 +26,15 @@
 
 import SwiftyJSON
 
-public extension JSON {
+public extension SwiftyJSON.JSON {
   init(parseJSONC json: String) {
     let json = json.replacingOccurrences(of: "\r", with: "\n").split(separator: "\n").filter {
       !$0.trimmingCharacters(in: [" ", "\t"]).starts(with: "//")
     }.joined(separator: "\n")
-    self = JSON(parseJSON: json)
+    self = SwiftyJSON.JSON(parseJSON: json)
   }
 
-  mutating func merge(other: JSON) {
+  mutating func merge(other: SwiftyJSON.JSON) {
     if self.type == other.type {
       switch self.type {
       case .dictionary:
@@ -49,7 +49,7 @@ public extension JSON {
     }
   }
 
-  func mergeAndOverride(other: JSON) -> JSON {
+  func mergeAndOverride(other: SwiftyJSON.JSON) -> SwiftyJSON.JSON {
     var merged = self
     merged.merge(other: other)
     return merged
