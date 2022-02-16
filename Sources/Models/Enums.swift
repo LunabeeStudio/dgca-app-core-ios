@@ -41,6 +41,7 @@ public enum AttributeKey: String {
   case testStatements
   case vaccineStatements
   case recoveryStatements
+  case exemptionStatement // Needed for France additions.
 }
 
 public enum AppType: Int {
@@ -52,6 +53,7 @@ public enum HCertType: String {
   case test
   case vaccine
   case recovery
+  case exemption
   case unknown
 }
 
@@ -69,7 +71,8 @@ public let attributeKeys: [AttributeKey: [String]] = [
   .dateOfBirth: ["dob"],
   .testStatements: ["t"],
   .vaccineStatements: ["v"],
-  .recoveryStatements: ["r"]
+  .recoveryStatements: ["r"],
+  .exemptionStatement: ["ex"] // Needed for France additions.
 ]
 
 public enum InfoSectionStyle {

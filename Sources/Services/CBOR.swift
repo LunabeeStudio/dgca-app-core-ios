@@ -63,6 +63,7 @@ public class CBOR {
                 let cbor = try? decoder.decodeItem(),
                 case let SwiftCBOR.CBOR.tagged(_, cborElement) = cbor,
                 case let SwiftCBOR.CBOR.array(array) = cborElement,
+                array.count >= 4,
                 case let SwiftCBOR.CBOR.byteString(protectedBytes) = array[0],
                 let protected = try? SwiftCBOR.CBOR.decode(protectedBytes),
                 case let SwiftCBOR.CBOR.map(unprotectedMap) = array[1],

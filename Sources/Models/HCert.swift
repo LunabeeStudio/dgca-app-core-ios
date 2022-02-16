@@ -34,11 +34,12 @@ public class HCert: Codable {
   public let cborData: Data
   public let kidStr: String
   public let issCode: String
-  public let header: JSON
-  public let body: JSON
+  public let header: SwiftyJSON.JSON
+  public let body: SwiftyJSON.JSON
   public let iat: Date
   public let exp: Date
   public var ruleCountryCode: String?
+  public let prefix: String
 
   public var dateOfBirth: String {
     return get(.dateOfBirth).string ?? ""
@@ -97,6 +98,8 @@ public class HCert: Codable {
         return .recovery
     case is TestEntry:
         return .test
+    case is ExemptionEntry:
+        return .exemption
     default:
         return .unknown
       }
@@ -111,8 +114,9 @@ public class HCert: Codable {
   var recoveryStatements: [RecoveryEntry] {
     return get(.recoveryStatements).array?.compactMap {RecoveryEntry(body: $0)} ?? []
   }
+  var exemptionStatement: ExemptionEntry? { ExemptionEntry(body: SwiftyJSON.JSON(get(.exemptionStatement))) }
   var statements: [HCertEntry] {
-    return testStatements + vaccineStatements + recoveryStatements
+    return testStatements + vaccineStatements + recoveryStatements + [exemptionStatement].compactMap { $0 }
   }
   public var statement: HCertEntry! {
     return statements.last
@@ -155,6 +159,8 @@ public class HCert: Codable {
     }
         
     self.ruleCountryCode = ruleCountryCode
+    let prefix: String = fullPayloadString.replacingOccurrences(of: payloadString, with: "")
+    self.prefix = prefix
     guard let compressed = try? payloadString.fromBase45() else {
       throw CertificateParsingError.parsing(errors: [ParseError.base45])
     }
@@ -172,8 +178,8 @@ public class HCert: Codable {
     }
     
     kidStr = KID.string(from: kid)
-    header = JSON(parseJSON: headerStr)
-    var body = JSON(parseJSON: bodyStr)
+    header = SwiftyJSON.JSON(parseJSON: headerStr)
+    var body = SwiftyJSON.JSON(parseJSON: bodyStr)
     iat = Date(timeIntervalSince1970: Double(body["6"].int ?? 0))
     exp = Date(timeIntervalSince1970: Double(body["4"].int ?? 0))
     issCode = body["1"].string ?? ""
@@ -198,7 +204,7 @@ public class HCert: Codable {
     #endif
   }
 
-  private func get(_ attribute: AttributeKey) -> JSON {
+  func get(_ attribute: AttributeKey) -> SwiftyJSON.JSON {
     var object = body
     for key in attributeKeys[attribute] ?? [] {
       object = object[key]
@@ -208,8 +214,17 @@ public class HCert: Codable {
 }
 
 extension HCert {
+   private func schema(for prefix: String) -> String {
+       switch prefix {
+       case WalletConstant.DccPrefix.exemptionCertificate.rawValue:
+           return exemptionDccSchema
+       default:
+           return euDgcSchemaV1
+       }
+   }
+
    private func parseBodyV1() -> [ParseError] {
-    guard let schema = JSON(parseJSON: euDgcSchemaV1).dictionaryObject, let bodyDict = body.dictionaryObject else {
+    guard let schema = SwiftyJSON.JSON(parseJSON: schema(for: prefix)).dictionaryObject, let bodyDict = body.dictionaryObject else {
       return [.json(error: "Schema Validation failed")]
     }
      do {

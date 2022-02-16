@@ -34,10 +34,6 @@ public extension String {
     static var zeroWidthSpace: String {
         "\u{200B}"
     }
-  
-    var localized: String {
-        return l10n(self)
-    }
 
     private func generatePadString(length maxLength: Int, pad: String = " ") -> String? {
         if pad.isEmpty || count <= 0 { return nil }

@@ -28,7 +28,11 @@ import Foundation
 
 public struct HCertConfig {
   public static let `default` = HCertConfig()
-  public static let supportedPrefixes = [ "HC1:" ]
+  public static let supportedPrefixes = [
+      "HC1:",
+      WalletConstant.DccPrefix.exemptionCertificate.rawValue,
+      WalletConstant.DccPrefix.activityCertificate.rawValue
+  ]
     
   public let prefetchAllCodes: Bool
   public let checkSignatures: Bool

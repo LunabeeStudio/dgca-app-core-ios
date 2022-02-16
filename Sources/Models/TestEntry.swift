@@ -37,37 +37,14 @@ public struct TestEntry: HCertEntry {
     public var typeAddon: String { "" }
     public let uvci: String
 
-    private let diseaseTargeted: String
-    private let type: String
-    private let sampleTime: Date
-    private let resultNegative: Bool
-    private let testCenter: String
-    private let countryCode: String
-    private let issuer: String
-
-    public var info: [InfoSection] {
-        return [InfoSection( header: "Time of Sampling".localized, content: sampleTime.dateTimeStringUtc),
-          InfoSection( header: "Test Result".localized,
-            content: resultNegative ? "Not Detected".localized : "Detected ⚠️".localized),
-          InfoSection( header: "Targeted Disease".localized,
-                    content: l10n("disease." + diseaseTargeted, or: "\("Unknown".localized): \(diseaseTargeted)")),
-                InfoSection( header: "Test Center".localized, content: testCenter, isPrivate: true),
-                InfoSection( header: "Country of Test".localized, content: country(for: countryCode), isPrivate: true),
-                InfoSection( header: "Test Issuer".localized, content: issuer, isPrivate: true )]
-  }
-
-    public var walletInfo: [InfoSection] {
-      return [InfoSection( header: "Test Result".localized,
-          content: resultNegative ? "Not Detected".localized : "Detected ⚠️".localized),
-        InfoSection( header: "Time of Sampling".localized, content: sampleTime.dateTimeStringUtc),
-        InfoSection( header: "Type of Test".localized, content: type),
-        InfoSection( header: "Targeted Disease".localized,
-            content: l10n("disease." + diseaseTargeted, or: "\("Unknown".localized): \(diseaseTargeted)")),
-        InfoSection( header: "Test Center".localized, content: testCenter, isPrivate: true),
-        InfoSection( header: "Country of Test".localized,content: country(for: countryCode), isPrivate: true),
-        InfoSection( header: "Test Issuer".localized, content: issuer, isPrivate: true)
-    ]
-  }
+    let diseaseTargeted: String
+    let type: String
+    let sampleTime: Date
+    let resultNegative: Bool
+    let testCenter: String
+    let countryCode: String
+    let issuer: String
+    let manufacturer: String?
 
   public var validityFailures: [String] {
       var fail = [String]()
@@ -89,9 +66,10 @@ public struct TestEntry: HCertEntry {
     case countryCode = "co"
     case issuer = "is"
     case uvci = "ci"
+    case manufacturer = "ma"
   }
 
-  init?(body: JSON) {
+  init?(body: SwiftyJSON.JSON) {
     guard
       let diseaseTargeted = body[Fields.diseaseTargeted.rawValue].string,
       let type = body[Fields.type.rawValue].string,
@@ -113,6 +91,7 @@ public struct TestEntry: HCertEntry {
     self.countryCode = countryCode
     self.issuer = issuer
     self.uvci = uvci
+    self.manufacturer = body[Fields.manufacturer.rawValue].string
   }
 
 }

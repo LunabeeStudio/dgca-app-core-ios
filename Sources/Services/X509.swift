@@ -36,33 +36,27 @@ public class X509 {
   static let OID_RECOVERY = "1.3.6.1.4.1.1847.2021.1.3"
   static let OID_ALT_RECOVERY = "1.3.6.1.4.1.0.1847.2021.1.3"
   
-  public static func pubKey(from b64EncodedCert: String) -> SecKey? {
-    guard
-      let encodedCertData = Data(base64Encoded: b64EncodedCert),
-      let cert = SecCertificateCreateWithData(nil, encodedCertData as CFData),
-      let publicKey = SecCertificateCopyKey(cert)
-    else {
-      return nil
+    public static func pubKey(from b64EncodedCert: String) -> SecKey? {
+        guard let encodedCertData = Data(base64Encoded: b64EncodedCert) else { return nil }
+        guard let cert = SecCertificateCreateWithData(nil, encodedCertData as CFData) else { return nil }
+        let publicKey: SecKey?
+        if #available(iOS 12.0, *) {
+            publicKey = SecCertificateCopyKey(cert)
+        } else {
+            publicKey = SecCertificateCopyPublicKey(cert)
+        }
+        guard let unwrappedPublicKey = publicKey else { return nil }
+        return unwrappedPublicKey
     }
-    return publicKey
-  }
   
   public static func derPubKey(for secKey: SecKey) -> Data? {
-    guard
-      let pubKey = SecKeyCopyPublicKey(secKey)
-    else {
-      return nil
-    }
+    guard let pubKey = SecKeyCopyPublicKey(secKey) else { return nil }
     return derKey(for: pubKey)
   }
   
   public static func derKey(for secKey: SecKey) -> Data? {
     var error: Unmanaged<CFError>?
-    guard
-      let publicKeyData = SecKeyCopyExternalRepresentation(secKey, &error)
-    else {
-      return nil
-    }
+    guard let publicKeyData = SecKeyCopyExternalRepresentation(secKey, &error) else { return nil }
     return exportECPublicKeyToDER(publicKeyData as Data, keyType: kSecAttrKeyTypeEC as String, keySize: 384)
   }
   
@@ -101,7 +95,7 @@ public class X509 {
   }
   
   static func checkisSuitable(cert: String, certType: HCertType) -> Bool{
-    return isSuitable(cert: Data(base64Encoded:  cert)!, for: certType)
+      return isSuitable(cert: Data(base64Encoded:  cert.cleaningPEMStrings())!, for: certType)
   }
   
   static func isCertificateValid(cert: String) -> Bool {
@@ -128,6 +122,8 @@ public class X509 {
         return nil != certificate.extensionObject(oid: OID_VACCINATION) || nil != certificate.extensionObject(oid: OID_ALT_VACCINATION)
       case .recovery:
         return nil != certificate.extensionObject(oid: OID_RECOVERY) || nil != certificate.extensionObject(oid: OID_ALT_RECOVERY)
+      case .exemption:
+          return true
       case .unknown:
         return false
       }

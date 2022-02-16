@@ -35,43 +35,15 @@ public struct VaccinationEntry: HCertEntry {
   }
   public let uvci: String
     
-  private let diseaseTargeted: String
-  private let vaccineOrProphylaxis: String
-  private let medicalProduct: String
-  private let manufacturer: String
-  private let countryCode: String
-  private let issuer: String
-  private let doseNumber: Int
-  private let dosesTotal: Int
-  private let date: Date
-
-  public var info: [InfoSection] {
-    return [InfoSection(header: "Date of Vaccination".localized, content: date.localDateString),
-      InfoSection( header: "Targeted Disease".localized,
-                content: l10n("disease." + diseaseTargeted, or: "\("Unknown".localized): \(diseaseTargeted)")),
-            InfoSection(header: "Authorization Holder / Manufacturer".localized,
-                content: l10n("vac.man." + manufacturer, or: "\("Unknown".localized): \(manufacturer)"), isPrivate: true ),
-            InfoSection(header: "Medical Product".localized,
-                content: l10n("vac.product." + medicalProduct, or: "\("Unknown".localized): \(medicalProduct)"), isPrivate: true
-      ),
-      InfoSection(header: "Vaccine or Prophylaxis".localized,
-        content: l10n("vac.type." + vaccineOrProphylaxis, or: "\("Unknown".localized): \(vaccineOrProphylaxis)"), isPrivate: true),
-      InfoSection( header: "Country of Vaccination".localized, content: country(for: countryCode), isPrivate: true),
-      InfoSection( header: "Certificate Issuer".localized, content: issuer, isPrivate: true)
-    ]
-  }
-  
-  public var walletInfo: [InfoSection] {
-    return [InfoSection( header: "Date of Vaccination".localized, content: date.localDateString ),
-      InfoSection( header: "Targeted Disease".localized,
-                content: l10n("disease." + diseaseTargeted, or: "\("Unknown".localized): \(diseaseTargeted)")),
-            InfoSection( header: "Authorization Holder / Manufacturer".localized,
-                content: l10n("vac.man." + manufacturer, or: "\("Unknown".localized): \(manufacturer)"), isPrivate: true ),
-            InfoSection(header: "Vaccine or Prophylaxis".localized,
-                content: l10n("vac.type." + vaccineOrProphylaxis, or: "\("Unknown".localized): \(vaccineOrProphylaxis)"), isPrivate: true),
-            InfoSection( header: "Country of Vaccination".localized, content: country(for: countryCode), isPrivate: true),
-            InfoSection(header: "Certificate Issuer".localized, content: issuer, isPrivate: true)]
-  }
+  let diseaseTargeted: String
+  let vaccineOrProphylaxis: String
+  let medicalProduct: String
+  let manufacturer: String
+  let countryCode: String
+  let issuer: String
+  let doseNumber: Int
+  let dosesTotal: Int
+  let date: Date
 
   public var validityFailures: [String] {
     var fail = [String]()
@@ -94,7 +66,7 @@ public struct VaccinationEntry: HCertEntry {
     case uvci = "ci"
   }
 
-  init?(body: JSON) {
+  init?(body: SwiftyJSON.JSON) {
     guard
       let diseaseTargeted = body[Fields.diseaseTargeted.rawValue].string,
       let vaccineOrProphylaxis = body[Fields.vaccineOrProphylaxis.rawValue].string,
